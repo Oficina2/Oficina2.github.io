@@ -1,0 +1,278 @@
+<html><head><base href="https://policiadelaciudad.gov.ar/robosyhurtos/"><title>Sistema de Gestión - División ROBOS Y HURTOS</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f0f0f0;
+  }
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  h1, h2 {
+    color: #003366;
+  }
+  .form-container, .stats-container {
+    background-color: #fff;
+    border-radius: 5px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+  form {
+    display: flex;
+    flex-direction: column;
+  }
+  label {
+    margin-top: 10px;
+  }
+  input, select {
+    margin-top: 5px;
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+  }
+  button {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #003366;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  button:hover {
+    background-color: #004080;
+  }
+  #chart-container {
+    width: 100%;
+    max-width: 800px;
+    margin: 20px auto;
+  }
+  #message {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 3px;
+  }
+  .success {
+    background-color: #d4edda;
+    color: #155724;
+  }
+  .error {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Sistema de Gestión - División ROBOS Y HURTOS</h1>
+  
+  <div class="form-container">
+    <h2>Ingreso de Datos</h2>
+    <form id="event-form">
+      <label for="date">Fecha:</label>
+      <input type="date" id="date" required>
+      
+      <label for="event-type">Tipo de Evento:</label>
+      <select id="event-type" required>
+        <option value="">Seleccione un tipo</option>
+        <option value="Detenidos">Detenidos</option>
+        <option value="Allanamiento">Allanamiento</option>
+      </select>
+      
+      <button type="submit">Registrar Evento</button>
+    </form>
+    <div id="message"></div>
+  </div>
+  
+  <div class="stats-container">
+    <h2>Estadísticas y Gráficos</h2>
+    <div>
+      <label for="start-date">Fecha Inicial:</label>
+      <input type="date" id="start-date">
+      
+      <label for="end-date">Fecha Final:</label>
+      <input type="date" id="end-date">
+      
+      <label for="filter-event-type">Filtrar por Tipo:</label>
+      <select id="filter-event-type">
+        <option value="">Todos</option>
+        <option value="Detenidos">Detenidos</option>
+        <option value="Allanamiento">Allanamiento</option>
+      </select>
+      
+      <button id="filter-btn">Filtrar</button>
+    </div>
+    
+    <div id="chart-container">
+      <canvas id="events-chart"></canvas>
+    </div>
+    
+    <div id="summary-stats"></div>
+  </div>
+</div>
+
+<script>
+let eventsData = [];
+let chart;
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('event-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const date = document.getElementById('date').value;
+    const eventType = document.getElementById('event-type').value;
+    
+    if (date && eventType) {
+      const newEvent = {
+        id: Date.now(),
+        date: date,
+        type: eventType
+      };
+      
+      eventsData.push(newEvent);
+      updateChart();
+      updateSummaryStats();
+      
+      // Clear form
+      this.reset();
+      
+      // Show success message
+      showMessage('Evento registrado con éxito', 'success');
+    } else {
+      // Show error message
+      showMessage('Por favor, complete todos los campos', 'error');
+    }
+  });
+
+  document.getElementById('filter-btn').addEventListener('click', function() {
+    updateChart();
+    updateSummaryStats();
+  });
+
+  // Initialize chart and stats
+  updateChart();
+  updateSummaryStats();
+});
+
+function showMessage(message, type) {
+  const messageElement = document.getElementById('message');
+  messageElement.textContent = message;
+  messageElement.className = type;
+  setTimeout(() => {
+    messageElement.textContent = '';
+    messageElement.className = '';
+  }, 3000);
+}
+
+function updateChart() {
+  const startDate = document.getElementById('start-date').value;
+  const endDate = document.getElementById('end-date').value;
+  const filterType = document.getElementById('filter-event-type').value;
+  
+  let filteredData = eventsData;
+  
+  if (startDate) {
+    filteredData = filteredData.filter(event => event.date >= startDate);
+  }
+  if (endDate) {
+    filteredData = filteredData.filter(event => event.date <= endDate);
+  }
+  if (filterType) {
+    filteredData = filteredData.filter(event => event.type === filterType);
+  }
+  
+  const groupedData = groupByDate(filteredData);
+  
+  const ctx = document.getElementById('events-chart').getContext('2d');
+  
+  if (chart) {
+    chart.destroy();
+  }
+  
+  chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: Object.keys(groupedData),
+      datasets: [
+        {
+          label: 'Detenidos',
+          data: Object.values(groupedData).map(day => day.Detenidos || 0),
+          backgroundColor: 'rgba(54, 162, 235, 0.5)'
+        },
+        {
+          label: 'Allanamientos',
+          data: Object.values(groupedData).map(day => day.Allanamiento || 0),
+          backgroundColor: 'rgba(255, 99, 132, 0.5)'
+        }
+      ]
+    },
+    options: {
+      scales: {
+        y: {
+          beginAtZero: true,
+          stepSize: 1
+        }
+      },
+      responsive: true,
+      plugins: {
+        legend: {
+          position: 'top',
+        },
+        title: {
+          display: true,
+          text: 'Eventos por Fecha'
+        }
+      }
+    }
+  });
+}
+
+function groupByDate(data) {
+  return data.reduce((acc, event) => {
+    if (!acc[event.date]) {
+      acc[event.date] = {};
+    }
+    if (!acc[event.date][event.type]) {
+      acc[event.date][event.type] = 0;
+    }
+    acc[event.date][event.type]++;
+    return acc;
+  }, {});
+}
+
+function updateSummaryStats() {
+  const startDate = document.getElementById('start-date').value;
+  const endDate = document.getElementById('end-date').value;
+  const filterType = document.getElementById('filter-event-type').value;
+  
+  let filteredData = eventsData;
+  
+  if (startDate) {
+    filteredData = filteredData.filter(event => event.date >= startDate);
+  }
+  if (endDate) {
+    filteredData = filteredData.filter(event => event.date <= endDate);
+  }
+  if (filterType) {
+    filteredData = filteredData.filter(event => event.type === filterType);
+  }
+  
+  const totalDetenidos = filteredData.filter(event => event.type === 'Detenidos').length;
+  const totalAllanamientos = filteredData.filter(event => event.type === 'Allanamiento').length;
+  
+  document.getElementById('summary-stats').innerHTML = `
+    <h3>Resumen Estadístico</h3>
+    <p>Total de Detenidos: ${totalDetenidos}</p>
+    <p>Total de Allanamientos: ${totalAllanamientos}</p>
+  `;
+}
+</script>
+</body></html>
